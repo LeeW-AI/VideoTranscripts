@@ -1,9 +1,13 @@
-print("🚀 UPDATED APP.PY LOADED")
-
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 
 app = Flask(__name__)
+
+print("🚀 UPDATED APP.PY LOADED")
+
+@app.route("/")
+def home():
+    return {"status": "ok"}
 
 @app.route("/transcript")
 def transcript():
@@ -15,8 +19,6 @@ def transcript():
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # Prefer manually created English transcript, fallback to auto
-        transcript = None
         try:
             transcript = transcript_list.find_manually_created_transcript(['en'])
         except:
@@ -32,14 +34,6 @@ def transcript():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
-
-@app.route("/")
-def home():
-    return {
-        "status": "ok",
-        "endpoint": "/transcript?videoId=VIDEO_ID"
-    }
 
 
 if __name__ == "__main__":
