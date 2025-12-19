@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 🔥 Cache buster — change value to force rebuild
-ARG CACHEBUST=1
+ARG CACHEBUST=2
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
