@@ -1,5 +1,11 @@
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import (
+    TranscriptsDisabled,
+    NoTranscriptFound,
+    VideoUnavailable
+)
+
 import os
 
 app = Flask(__name__)
@@ -12,32 +18,21 @@ def transcript():
         return jsonify({"error": "Missing videoId"}), 400
 
     try:
-        api = YouTubeTranscriptApi()
-        transcript_list = api.list(video_id)
-
-        # Prefer manually created English transcript
-        transcript = None
-        for t in transcript_list:
-            if t.language_code == "en" and not t.is_generated:
-                transcript = t
-                break
-
-        # Fallback to first available transcript
-        if transcript is None:
-            transcript = next(iter(transcript_list))
-
-        data = transcript.fetch()
-        text = " ".join(item["text"] for item in data)
+        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
+        text = " ".join(item.text for item in transcript_data)
 
         return jsonify({
             "videoId": video_id,
-            "language": transcript.language,
-            "generated": transcript.is_generated,
             "transcript": text
         })
 
+    except TranscriptsDisabled:
+        return jsonify({"error": "Transcripts disabled"}), 404
+    except NoTranscriptFound:
+        return jsonify({"error": "No transcript found"}), 404
+    except VideoUnavailable:
+        return jsonify({"error": "Video unavailable"}), 404
     except Exception as e:
-        # Covers: disabled transcripts, unavailable video, blocked IP, etc.
         return jsonify({
             "error": "Transcript fetch failed",
             "details": str(e)
