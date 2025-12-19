@@ -1,4 +1,4 @@
-# New version 22:57
+# new version 23:03 19th Dec
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -31,15 +31,16 @@ def transcript():
 
         data = transcript.fetch()
 
-        # IMPORTANT: v1.2.3 objects use .text (not dict access)
-        # use cleaned text version for json
+        # 1️⃣ Build raw text FIRST
+        text = " ".join(item.text for item in data)
+
+        # 2️⃣ Clean the text
         cleaned_text = re.sub(r"[♬♪]", "", text)
         cleaned_text = re.sub(r"\s+", " ", cleaned_text).strip()
-        cleaned_text = " ".join(item.text for item in data)
 
         return jsonify({
             "videoId": video_id,
-            "transcript": text
+            "transcript": cleaned_text
         })
 
     except TranscriptsDisabled:
