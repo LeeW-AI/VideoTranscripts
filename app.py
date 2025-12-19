@@ -23,3 +23,9 @@ def transcript():
         return jsonify({"error": "No transcript found"}), 404
     except VideoUnavailable:
         return jsonify({"error": "Video unavailable"}), 404
+
+import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
