@@ -1,4 +1,4 @@
-# new version 23:03 19th Dec
+# new version 19th Dec 23:56
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -13,6 +13,20 @@ import re
 
 app = Flask(__name__)
 
+# --------------------------------------------------
+# Helpers
+# --------------------------------------------------
+
+def clean_text(text: str) -> str:
+    text = re.sub(r"[♬♪]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+# --------------------------------------------------
+# Transcript Endpoint
+# --------------------------------------------------
+
 @app.route("/transcript")
 def transcript():
     video_id = request.args.get("videoId")
@@ -24,24 +38,17 @@ def transcript():
         api = YouTubeTranscriptApi()
         transcript_list = api.list(video_id)
 
-        # Prefer manually created English transcript
         try:
             transcript = transcript_list.find_manually_created_transcript(['en'])
         except NoTranscriptFound:
             transcript = transcript_list.find_generated_transcript(['en'])
 
         data = transcript.fetch()
-
-        # 1️⃣ Build raw text FIRST
         text = " ".join(item.text for item in data)
-
-        # 2️⃣ Clean the text
-        cleaned_text = re.sub(r"[♬♪]", "", text)
-        cleaned_text = re.sub(r"\s+", " ", cleaned_text).strip()
 
         return jsonify({
             "videoId": video_id,
-            "transcript": cleaned_text
+            "transcript": clean_text(text)
         })
 
     except TranscriptsDisabled:
@@ -56,6 +63,10 @@ def transcript():
             "details": str(e)
         }), 500
 
+
+# --------------------------------------------------
+# YouTube API Helpers
+# --------------------------------------------------
 
 def get_channel_id(channel_name: str) -> str | None:
     api_key = os.environ.get("YOUTUBE_API_KEY")
@@ -79,6 +90,7 @@ def get_channel_id(channel_name: str) -> str | None:
         return None
 
     return items[0]["snippet"]["channelId"]
+
 
 def get_latest_videos(channel_id: str, limit: int):
     api_key = os.environ.get("YOUTUBE_API_KEY")
@@ -105,6 +117,7 @@ def get_latest_videos(channel_id: str, limit: int):
 
     return videos
 
+
 def fetch_clean_transcript(video_id: str) -> str | None:
     try:
         api = YouTubeTranscriptApi()
@@ -117,26 +130,26 @@ def fetch_clean_transcript(video_id: str) -> str | None:
 
         data = transcript.fetch()
         text = " ".join(item.text for item in data)
-
-        # clean text
-        text = re.sub(r"[♬♪]", "", text)
-        text = re.sub(r"\s+", " ", text).strip()
-
-        return text
+        return clean_text(text)
 
     except Exception:
         return None
+
+
+# --------------------------------------------------
+# Unified YouTube Query Endpoint
+# --------------------------------------------------
 
 @app.route("/youtube-query", methods=["POST"])
 def youtube_query():
     payload = request.get_json(silent=True) or {}
 
     action = payload.get("action")
-    channel_name = payload.get("channel_name")
+    channel_name = payload.get("channel_name") or payload.get("channel")
     limit = int(payload.get("limit", 3))
 
     if not action or not channel_name:
-        return jsonify({"error": "Missing action or channel_name"}), 400
+        return jsonify({"error": "Missing action or channel"}), 400
 
     channel_id = get_channel_id(channel_name)
     if not channel_id:
@@ -144,26 +157,32 @@ def youtube_query():
 
     videos = get_latest_videos(channel_id, limit)
 
-    # 1️⃣ LIST TITLES ONLY
-    if action == "list_titles":
+    # --------------------------------------------------
+    # 1️⃣ TITLES ONLY
+    # --------------------------------------------------
+    if action == "titles":
         titles = [v["title"] for v in videos]
 
-        spoken = f"The latest {len(titles)} videos from {channel_name} are: "
-        spoken += ". ".join(titles)
+        spoken = (
+            f"The latest {len(titles)} videos from {channel_name} are: "
+            + ". ".join(titles)
+        )
 
         return jsonify({
             "spoken_response": spoken,
             "videos": videos
         })
 
-    # 2️⃣ SUMMARISE VIDEOS
-    if action == "summarise":
+    # --------------------------------------------------
+    # 2️⃣ SUMMARY
+    # --------------------------------------------------
+    if action == "summary":
         transcripts = []
 
         for v in videos:
             t = fetch_clean_transcript(v["videoId"])
             if t:
-                transcripts.append(t)
+                transcripts.append(f"Title: {v['title']}\n{t}")
 
         if not transcripts:
             return jsonify({
@@ -172,9 +191,14 @@ def youtube_query():
 
         combined_text = "\n\n".join(transcripts)
 
-        # Ask OpenAI for a spoken summary
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_key:
+            return jsonify({
+                "spoken_response": "OpenAI summarisation is not configured."
+            }), 500
+
         headers = {
-            "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
+            "Authorization": f"Bearer {openai_key}",
             "Content-Type": "application/json"
         }
 
@@ -183,11 +207,14 @@ def youtube_query():
             "messages": [
                 {
                     "role": "system",
-                    "content": "Summarise the following YouTube content into a concise, spoken-friendly overview."
+                    "content": (
+                        "Summarise the following YouTube videos into a concise, "
+                        "spoken-friendly overview. Mention each video briefly."
+                    )
                 },
                 {
                     "role": "user",
-                    "content": combined_text[:12000]  # safety limit
+                    "content": combined_text[:12000]
                 }
             ]
         }
@@ -208,6 +235,11 @@ def youtube_query():
         })
 
     return jsonify({"error": "Unknown action"}), 400
+
+
+# --------------------------------------------------
+# App Entry
+# --------------------------------------------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
