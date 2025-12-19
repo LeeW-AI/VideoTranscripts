@@ -1,3 +1,4 @@
+# version: 2025-12-19-02
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 
