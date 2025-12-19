@@ -18,3 +18,13 @@ def transcript():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/debug")
+def debug():
+    import youtube_transcript_api
+    from youtube_transcript_api import YouTubeTranscriptApi
+
+    return {
+        "module": youtube_transcript_api.__file__,
+        "dir": dir(YouTubeTranscriptApi)
+    }
