@@ -8,6 +8,7 @@ from youtube_transcript_api._errors import (
     VideoUnavailable
 )
 import os
+import re
 
 app = Flask(__name__)
 
@@ -31,7 +32,10 @@ def transcript():
         data = transcript.fetch()
 
         # IMPORTANT: v1.2.3 objects use .text (not dict access)
-        text = " ".join(item.text for item in data)
+        # use cleaned text version for json
+        cleaned_text = re.sub(r"[♬♪]", "", text)
+        cleaned_text = re.sub(r"\s+", " ", cleaned_text).strip()
+        cleaned_text = " ".join(item.text for item in data)
 
         return jsonify({
             "videoId": video_id,
