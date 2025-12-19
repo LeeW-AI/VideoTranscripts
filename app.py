@@ -1,5 +1,3 @@
-# FORCE REBUILD 2025-01-19
-
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
@@ -7,7 +5,6 @@ from youtube_transcript_api._errors import (
     NoTranscriptFound,
     VideoUnavailable
 )
-
 import os
 
 app = Flask(__name__)
@@ -20,8 +17,19 @@ def transcript():
         return jsonify({"error": "Missing videoId"}), 400
 
     try:
-        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
-        text = " ".join(item.text for item in transcript_data)
+        api = YouTubeTranscriptApi()
+        transcript_list = api.list(video_id)
+
+        # Prefer manually created English transcript
+        try:
+            transcript = transcript_list.find_manually_created_transcript(['en'])
+        except NoTranscriptFound:
+            transcript = transcript_list.find_generated_transcript(['en'])
+
+        data = transcript.fetch()
+
+        # IMPORTANT: v1.2.3 objects use .text (not dict access)
+        text = " ".join(item.text for item in data)
 
         return jsonify({
             "videoId": video_id,
@@ -39,7 +47,6 @@ def transcript():
             "error": "Transcript fetch failed",
             "details": str(e)
         }), 500
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
