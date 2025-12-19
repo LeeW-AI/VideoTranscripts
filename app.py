@@ -11,8 +11,17 @@ def transcript():
         return jsonify({"error": "Missing videoId"}), 400
 
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        text = " ".join([item["text"] for item in transcript])
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        # Prefer manually created English transcript, fallback to auto
+        transcript = None
+        try:
+            transcript = transcript_list.find_manually_created_transcript(['en'])
+        except:
+            transcript = transcript_list.find_generated_transcript(['en'])
+
+        entries = transcript.fetch()
+        text = " ".join(item["text"] for item in entries)
 
         return jsonify({
             "videoId": video_id,
@@ -20,19 +29,16 @@ def transcript():
         })
 
     except Exception as e:
-        return jsonify({
-            "error": str(e)
-        }), 400
+        return jsonify({"error": str(e)}), 400
 
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
 
 @app.route("/")
 def home():
     return {
         "status": "ok",
-        "endpoints": {
-            "/transcript": "GET ?videoId=VIDEO_ID"
-        }
+        "endpoint": "/transcript?videoId=VIDEO_ID"
     }
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
