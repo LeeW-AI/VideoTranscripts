@@ -1,3 +1,5 @@
+print("🚀 UPDATED APP.PY LOADED")
+
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 
