@@ -1,2 +1,2 @@
 flask
-youtube_transcript_api==1.2.3
+youtube_transcript_api==1.2.3 # need to use this version
