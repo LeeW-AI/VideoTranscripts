@@ -1,4 +1,4 @@
-# new version 20th Dec 00:05
+# new version 20th Dec 00:37
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -22,6 +22,8 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+
+print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 
 # --------------------------------------------------
 # Transcript Endpoint
