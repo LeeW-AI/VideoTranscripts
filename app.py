@@ -237,6 +237,18 @@ def youtube_query():
     return jsonify({"error": "Unknown action"}), 400
 
 
+
+# temp test route
+@app.route("/youtube-test")
+def youtube_test():
+    return jsonify({
+        "ok": True,
+        "message": "YouTube backend is alive"
+    })
+
+
+
+
 # --------------------------------------------------
 # App Entry
 # --------------------------------------------------
