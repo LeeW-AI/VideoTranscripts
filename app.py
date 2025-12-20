@@ -1,4 +1,4 @@
-# Latest version 20th Dec 15:25
+# Latest version 20th Dec 15:27
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -155,6 +155,25 @@ def fetch_clean_transcript(video_id: str) -> str | None:
 
 @app.route("/youtube-query", methods=["POST"])
 def youtube_query():
+
+    # 🎯 PRIORITY ORDER
+    video_id = extract_video_id(video_url) if video_url else None
+    playlist_id = extract_playlist_id(playlist_url) if playlist_url else None
+
+    if video_id:
+        videos = [{"videoId": video_id, "title": "Provided video"}]
+
+    elif playlist_id:
+        videos = get_videos_from_playlist(playlist_id, limit)
+
+    else:
+        # fallback → treat query as channel search
+        channel_id = get_channel_id(query)
+        if not channel_id:
+            return jsonify({"error": "Target not found"}), 404
+        videos = get_latest_videos(channel_id, limit)
+
+
     payload = request.get_json(silent=True) or {}
 
     action = (payload.get("action") or "").strip().lower()
