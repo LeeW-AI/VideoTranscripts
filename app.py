@@ -1,4 +1,4 @@
-# Latest version 20th Dec 15:27
+# Latest version 20th Dec 16:04
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -155,40 +155,20 @@ def fetch_clean_transcript(video_id: str) -> str | None:
 
 @app.route("/youtube-query", methods=["POST"])
 def youtube_query():
-
-    # 🎯 PRIORITY ORDER
-    video_id = extract_video_id(video_url) if video_url else None
-    playlist_id = extract_playlist_id(playlist_url) if playlist_url else None
-
-    if video_id:
-        videos = [{"videoId": video_id, "title": "Provided video"}]
-
-    elif playlist_id:
-        videos = get_videos_from_playlist(playlist_id, limit)
-
-    else:
-        # fallback → treat query as channel search
-        channel_id = get_channel_id(query)
-        if not channel_id:
-            return jsonify({"error": "Target not found"}), 404
-        videos = get_latest_videos(channel_id, limit)
-
-
     payload = request.get_json(silent=True) or {}
 
     action = (payload.get("action") or "").strip().lower()
-    query = payload.get("query")          # free text (channel name)
-    video_url = payload.get("video_url")  # optional
-    playlist_url = payload.get("playlist_url")  # optional
+    query = payload.get("query")
+    video_url = payload.get("video_url")
+    playlist_url = payload.get("playlist_url")
     limit = int(payload.get("limit", 3))
 
-    print("ACTION RECEIVED:", action)
-    print("CHANNEL RECEIVED:", channel_name)
+    print("ACTION:", action)
+    print("QUERY:", query)
 
-    if not action or not channel_name:
-        return jsonify({"error": "Missing action or channel_name"}), 400
-
-    # 🔁 NORMALISE ACTIONS
+    # ----------------------------
+    # Normalise action
+    # ----------------------------
     if action in ["titles", "list", "list_titles"]:
         action = "list_titles"
     elif action in ["summary", "summarize", "summarise"]:
@@ -196,88 +176,100 @@ def youtube_query():
     else:
         return jsonify({"error": f"Unknown action: {action}"}), 400
 
-    channel_id = get_channel_id(channel_name)
-    if not channel_id:
-        return jsonify({"error": "Channel not found"}), 404
+    videos = []
 
-    videos = get_latest_videos(channel_id, limit)
+    # ----------------------------
+    # 1️⃣ Direct video URL
+    # ----------------------------
+    if video_url:
+        video_id = extract_video_id(video_url)
+        if not video_id:
+            return jsonify({"error": "Invalid video URL"}), 400
+        videos = [{"videoId": video_id, "title": "Provided video"}]
 
-    # --------------------------------------------------
-    # 📌 LIST TITLES
-    # --------------------------------------------------
+    # ----------------------------
+    # 2️⃣ Playlist URL (future-safe)
+    # ----------------------------
+    elif playlist_url:
+        return jsonify({"error": "Playlist support not implemented yet"}), 400
 
+    # ----------------------------
+    # 3️⃣ Free-form query → channel heuristic
+    # ----------------------------
+    elif query:
+        q = query.lower()
+        channel_name = None
+
+        # 🔢 Extract "last N"
+        limit_match = re.search(r"last\s+(\d+)", q)
+        if limit_match:
+            limit = int(limit_match.group(1))
+
+        # 1️⃣ @handle
+        handle_match = re.search(r"@([\w\d_]+)", query)
+        if handle_match:
+            channel_name = handle_match.group(1)
+
+        # 2️⃣ "X channel"
+        if not channel_name and "channel" in q:
+            words = query.split()
+            for i, w in enumerate(words):
+                if w.lower() == "channel" and i > 0:
+                    channel_name = words[i - 1]
+                    break
+
+        # 3️⃣ Noise-strip fallback
+        if not channel_name:
+            channel_name = re.sub(
+                r"\b(youtube|videos?|latest|summarise|summarize|from|the)\b",
+                "",
+                query,
+                flags=re.IGNORECASE
+            ).strip()
+
+        print("RESOLVED CHANNEL NAME:", channel_name)
+
+        channel_id = get_channel_id(channel_name)
+        if not channel_id:
+            return jsonify({"error": "Channel not found"}), 404
+
+        videos = get_latest_videos(channel_id, limit)
+
+    else:
+        return jsonify({"error": "No target specified"}), 400
+
+    # ----------------------------
+    # LIST TITLES
+    # ----------------------------
     if action == "list_titles":
         titles = [v["title"] for v in videos]
-
-        spoken = f"The latest {len(titles)} videos from {channel_name} are: "
-        spoken += ". ".join(titles)
+        spoken = f"The latest {len(titles)} videos are: " + ". ".join(titles)
 
         return jsonify({
             "spoken_response": spoken,
             "videos": videos
         })
 
-    # --------------------------------------------------
-    # 📌 SUMMARISE
-    # --------------------------------------------------
+    # ----------------------------
+    # SUMMARISE
+    # ----------------------------
+    transcripts = []
+    for v in videos:
+        t = fetch_clean_transcript(v["videoId"])
+        if t:
+            transcripts.append(t)
 
-    if action == "summarise":
-        transcripts = []
+    # 🔁 Titles-only fallback
+    if not transcripts:
+        titles = [v["title"] for v in videos]
 
-        for v in videos:
-            t = fetch_clean_transcript(v["videoId"])
-            if t:
-                transcripts.append(t)
-
-        # 🔁 FALLBACK: TITLES ONLY
-        if not transcripts:
-            titles = [v["title"] for v in videos]
-
-            fallback_prompt = f"""
+        prompt = f"""
 Based only on the following YouTube video titles, provide a concise spoken summary
-of the main themes and topics covered. Do not mention missing transcripts.
+of the main themes. Do not mention missing transcripts.
 
 Titles:
 {chr(10).join(titles)}
 """
-
-            headers = {
-                "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
-                "Content-Type": "application/json"
-            }
-
-            body = {
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "Create a short spoken-friendly summary."
-                    },
-                    {
-                        "role": "user",
-                        "content": fallback_prompt
-                    }
-                ]
-            }
-
-            r = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=body,
-                timeout=30
-            )
-            r.raise_for_status()
-
-            summary = r.json()["choices"][0]["message"]["content"]
-
-            return jsonify({
-                "spoken_response": summary,
-                "videos": videos,
-                "fallback": "titles_only"
-            })
-
-        # ✅ FULL TRANSCRIPT SUMMARY
-        combined_text = "\n\n".join(transcripts)[:12000]
 
         headers = {
             "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
@@ -287,14 +279,8 @@ Titles:
         body = {
             "model": "gpt-4o-mini",
             "messages": [
-                {
-                    "role": "system",
-                    "content": "Summarise the following YouTube content into a concise, spoken-friendly overview."
-                },
-                {
-                    "role": "user",
-                    "content": combined_text
-                }
+                {"role": "system", "content": "Create a spoken-friendly summary."},
+                {"role": "user", "content": prompt}
             ]
         }
 
@@ -310,9 +296,46 @@ Titles:
 
         return jsonify({
             "spoken_response": summary,
-            "videos": videos
+            "videos": videos,
+            "fallback": "titles_only"
         })
 
+    # ✅ Full transcript summary
+    combined = "\n\n".join(transcripts)[:12000]
+
+    headers = {
+        "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {
+                "role": "system",
+                "content": "Summarise the following YouTube content into a concise spoken overview."
+            },
+            {
+                "role": "user",
+                "content": combined
+            }
+        ]
+    }
+
+    r = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=headers,
+        json=body,
+        timeout=30
+    )
+    r.raise_for_status()
+
+    summary = r.json()["choices"][0]["message"]["content"]
+
+    return jsonify({
+        "spoken_response": summary,
+        "videos": videos
+    })
 
 # --------------------------------------------------
 # Health Check
