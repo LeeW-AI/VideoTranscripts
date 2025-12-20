@@ -1,4 +1,4 @@
-# new version 20th Dec 00:57
+# Latest version 20th Dec 15:13
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -171,7 +171,10 @@ def youtube_query():
 
     videos = get_latest_videos(channel_id, limit)
 
+    # --------------------------------------------------
     # 📌 LIST TITLES
+    # --------------------------------------------------
+
     if action == "list_titles":
         titles = [v["title"] for v in videos]
 
@@ -183,7 +186,10 @@ def youtube_query():
             "videos": videos
         })
 
+    # --------------------------------------------------
     # 📌 SUMMARISE
+    # --------------------------------------------------
+
     if action == "summarise":
         transcripts = []
 
@@ -192,11 +198,54 @@ def youtube_query():
             if t:
                 transcripts.append(t)
 
+        # 🔁 FALLBACK: TITLES ONLY
         if not transcripts:
+            titles = [v["title"] for v in videos]
+
+            fallback_prompt = f"""
+Based only on the following YouTube video titles, provide a concise spoken summary
+of the main themes and topics covered. Do not mention missing transcripts.
+
+Titles:
+{chr(10).join(titles)}
+"""
+
+            headers = {
+                "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
+                "Content-Type": "application/json"
+            }
+
+            body = {
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Create a short spoken-friendly summary."
+                    },
+                    {
+                        "role": "user",
+                        "content": fallback_prompt
+                    }
+                ]
+            }
+
+            r = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=body,
+                timeout=30
+            )
+            r.raise_for_status()
+
+            summary = r.json()["choices"][0]["message"]["content"]
+
             return jsonify({
-                "spoken_response": "I couldn’t retrieve transcripts for the latest videos."
+                "spoken_response": summary,
+                "videos": videos,
+                "fallback": "titles_only"
             })
 
+        # ✅ FULL TRANSCRIPT SUMMARY
         combined_text = "\n\n".join(transcripts)[:12000]
 
         headers = {
@@ -233,15 +282,17 @@ def youtube_query():
             "videos": videos
         })
 
-# temp test route
+
+# --------------------------------------------------
+# Health Check
+# --------------------------------------------------
+
 @app.route("/youtube-test")
 def youtube_test():
     return jsonify({
         "ok": True,
         "message": "YouTube backend is alive"
     })
-
-
 
 
 # --------------------------------------------------
