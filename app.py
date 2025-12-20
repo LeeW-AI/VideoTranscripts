@@ -1,4 +1,4 @@
-# new version 20th Dec 00:37
+# new version 20th Dec 00:57
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -23,6 +23,7 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+# test the API Key is valid and working
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 
 # --------------------------------------------------
@@ -146,66 +147,60 @@ def fetch_clean_transcript(video_id: str) -> str | None:
 def youtube_query():
     payload = request.get_json(silent=True) or {}
 
-
-    action = payload.get("action")
+    action = (payload.get("action") or "").strip().lower()
     channel_name = payload.get("channel_name")
-    channel_id = payload.get("channel_id")
     limit = int(payload.get("limit", 3))
 
-    if not action or (not channel_name and not channel_id):
-        return jsonify({"error": "Missing action or channel"}), 400
+    print("ACTION RECEIVED:", action)
+    print("CHANNEL RECEIVED:", channel_name)
 
-    # Resolve channel ID
-    if not channel_id:
-        channel_id = get_channel_id(channel_name)
+    if not action or not channel_name:
+        return jsonify({"error": "Missing action or channel_name"}), 400
 
+    # 🔁 NORMALISE ACTIONS
+    if action in ["titles", "list", "list_titles"]:
+        action = "list_titles"
+    elif action in ["summary", "summarize", "summarise"]:
+        action = "summarise"
+    else:
+        return jsonify({"error": f"Unknown action: {action}"}), 400
+
+    channel_id = get_channel_id(channel_name)
     if not channel_id:
         return jsonify({"error": "Channel not found"}), 404
 
     videos = get_latest_videos(channel_id, limit)
 
-    # --------------------------------------------------
-    # 1️⃣ TITLES ONLY
-    # --------------------------------------------------
-    if action == "titles":
+    # 📌 LIST TITLES
+    if action == "list_titles":
         titles = [v["title"] for v in videos]
 
-        spoken = (
-            f"The latest {len(titles)} videos from {channel_name} are: "
-            + ". ".join(titles)
-        )
+        spoken = f"The latest {len(titles)} videos from {channel_name} are: "
+        spoken += ". ".join(titles)
 
         return jsonify({
             "spoken_response": spoken,
             "videos": videos
         })
 
-    # --------------------------------------------------
-    # 2️⃣ SUMMARY
-    # --------------------------------------------------
-    if action == "summary":
+    # 📌 SUMMARISE
+    if action == "summarise":
         transcripts = []
 
         for v in videos:
             t = fetch_clean_transcript(v["videoId"])
             if t:
-                transcripts.append(f"Title: {v['title']}\n{t}")
+                transcripts.append(t)
 
         if not transcripts:
             return jsonify({
                 "spoken_response": "I couldn’t retrieve transcripts for the latest videos."
             })
 
-        combined_text = "\n\n".join(transcripts)
-
-        openai_key = os.environ.get("OPENAI_API_KEY")
-        if not openai_key:
-            return jsonify({
-                "spoken_response": "OpenAI summarisation is not configured."
-            }), 500
+        combined_text = "\n\n".join(transcripts)[:12000]
 
         headers = {
-            "Authorization": f"Bearer {openai_key}",
+            "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
             "Content-Type": "application/json"
         }
 
@@ -214,14 +209,11 @@ def youtube_query():
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "Summarise the following YouTube videos into a concise, "
-                        "spoken-friendly overview. Mention each video briefly."
-                    )
+                    "content": "Summarise the following YouTube content into a concise, spoken-friendly overview."
                 },
                 {
                     "role": "user",
-                    "content": combined_text[:12000]
+                    "content": combined_text
                 }
             ]
         }
@@ -240,10 +232,6 @@ def youtube_query():
             "spoken_response": summary,
             "videos": videos
         })
-
-    return jsonify({"error": "Unknown action"}), 400
-
-
 
 # temp test route
 @app.route("/youtube-test")
