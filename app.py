@@ -23,6 +23,16 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+def extract_video_id(url: str) -> str | None:
+    match = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", url)
+    return match.group(1) if match else None
+
+
+def extract_playlist_id(url: str) -> str | None:
+    match = re.search(r"list=([\w-]+)", url)
+    return match.group(1) if match else None
+
+
 # test the API Key is valid and working
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 
@@ -148,7 +158,9 @@ def youtube_query():
     payload = request.get_json(silent=True) or {}
 
     action = (payload.get("action") or "").strip().lower()
-    channel_name = payload.get("channel_name")
+    query = payload.get("query")          # free text (channel name)
+    video_url = payload.get("video_url")  # optional
+    playlist_url = payload.get("playlist_url")  # optional
     limit = int(payload.get("limit", 3))
 
     print("ACTION RECEIVED:", action)
