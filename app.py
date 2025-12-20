@@ -144,14 +144,19 @@ def fetch_clean_transcript(video_id: str) -> str | None:
 def youtube_query():
     payload = request.get_json(silent=True) or {}
 
+
     action = payload.get("action")
-    channel_name = payload.get("channel_name") or payload.get("channel")
+    channel_name = payload.get("channel_name")
+    channel_id = payload.get("channel_id")
     limit = int(payload.get("limit", 3))
 
-    if not action or not channel_name:
+    if not action or (not channel_name and not channel_id):
         return jsonify({"error": "Missing action or channel"}), 400
 
-    channel_id = get_channel_id(channel_name)
+    # Resolve channel ID
+    if not channel_id:
+        channel_id = get_channel_id(channel_name)
+
     if not channel_id:
         return jsonify({"error": "Channel not found"}), 404
 
