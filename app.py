@@ -1,4 +1,6 @@
-# Latest version 20th Dec 16:04
+# Latest stable version – summarise fixes applied
+
+# Latest version 20th Dec 16:35
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -33,7 +35,6 @@ def extract_playlist_id(url: str) -> str | None:
     return match.group(1) if match else None
 
 
-# test the API Key is valid and working
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 
 # --------------------------------------------------
@@ -64,17 +65,10 @@ def transcript():
             "transcript": clean_text(text)
         })
 
-    except TranscriptsDisabled:
-        return jsonify({"error": "Transcripts disabled"}), 404
-    except NoTranscriptFound:
-        return jsonify({"error": "No transcript found"}), 404
-    except VideoUnavailable:
-        return jsonify({"error": "Video unavailable"}), 404
+    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+        return jsonify({"error": "Transcript unavailable"}), 404
     except Exception as e:
-        return jsonify({
-            "error": "Transcript fetch failed",
-            "details": str(e)
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # --------------------------------------------------
@@ -163,9 +157,6 @@ def youtube_query():
     playlist_url = payload.get("playlist_url")
     limit = int(payload.get("limit", 3))
 
-    print("ACTION:", action)
-    print("QUERY:", query)
-
     # ----------------------------
     # Normalise action
     # ----------------------------
@@ -176,41 +167,39 @@ def youtube_query():
     else:
         return jsonify({"error": f"Unknown action: {action}"}), 400
 
+    # ----------------------------
+    # Resolve target videos
+    # ----------------------------
     videos = []
 
-    # ----------------------------
-    # 1️⃣ Direct video URL
-    # ----------------------------
+    # 1️⃣ Direct video
     if video_url:
         video_id = extract_video_id(video_url)
         if not video_id:
             return jsonify({"error": "Invalid video URL"}), 400
         videos = [{"videoId": video_id, "title": "Provided video"}]
 
-    # ----------------------------
-    # 2️⃣ Playlist URL (future-safe)
-    # ----------------------------
+    # 2️⃣ Playlist (future)
     elif playlist_url:
-        return jsonify({"error": "Playlist support not implemented yet"}), 400
+        return jsonify({"error": "Playlist support not implemented"}), 400
 
-    # ----------------------------
-    # 3️⃣ Free-form query → channel heuristic
-    # ----------------------------
+    # 3️⃣ Free-form query → channel
     elif query:
         q = query.lower()
-        channel_name = None
 
-        # 🔢 Extract "last N"
+        # detect "last N"
         limit_match = re.search(r"last\s+(\d+)", q)
         if limit_match:
             limit = int(limit_match.group(1))
 
-        # 1️⃣ @handle
+        channel_name = None
+
+        # @handle
         handle_match = re.search(r"@([\w\d_]+)", query)
         if handle_match:
             channel_name = handle_match.group(1)
 
-        # 2️⃣ "X channel"
+        # "X channel"
         if not channel_name and "channel" in q:
             words = query.split()
             for i, w in enumerate(words):
@@ -218,16 +207,14 @@ def youtube_query():
                     channel_name = words[i - 1]
                     break
 
-        # 3️⃣ Noise-strip fallback
+        # fallback cleanup
         if not channel_name:
             channel_name = re.sub(
-                r"\b(youtube|videos?|latest|summarise|summarize|from|the)\b",
+                r"\b(youtube|videos?|latest|summari[sz]e|from|the)\b",
                 "",
                 query,
                 flags=re.IGNORECASE
             ).strip()
-
-        print("RESOLVED CHANNEL NAME:", channel_name)
 
         channel_id = get_channel_id(channel_name)
         if not channel_id:
@@ -251,7 +238,7 @@ def youtube_query():
         })
 
     # ----------------------------
-    # SUMMARISE
+    # SUMMARISE (FIXED)
     # ----------------------------
     transcripts = []
     for v in videos:
@@ -259,49 +246,35 @@ def youtube_query():
         if t:
             transcripts.append(t)
 
-    # 🔁 Titles-only fallback
-    if not transcripts:
-        titles = [v["title"] for v in videos]
+    is_single_video = len(videos) == 1
 
+    # Build summarisation prompt
+    if is_single_video and transcripts:
         prompt = f"""
-Based only on the following YouTube video titles, provide a concise spoken summary
-of the main themes. Do not mention missing transcripts.
+Summarise the following YouTube video transcript in a concise, spoken-friendly way.
+
+Transcript:
+{transcripts[0][:12000]}
+"""
+
+    elif transcripts:
+        prompt = f"""
+Summarise the following YouTube videos into a concise spoken overview.
+Highlight common themes and key points.
+
+Content:
+{chr(10).join(transcripts)[:12000]}
+"""
+
+    else:
+        titles = [v["title"] for v in videos]
+        prompt = f"""
+Based only on the following YouTube video titles, infer the main topics
+and provide a concise spoken summary. Do not mention missing transcripts.
 
 Titles:
 {chr(10).join(titles)}
 """
-
-        headers = {
-            "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
-            "Content-Type": "application/json"
-        }
-
-        body = {
-            "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": "Create a spoken-friendly summary."},
-                {"role": "user", "content": prompt}
-            ]
-        }
-
-        r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=body,
-            timeout=30
-        )
-        r.raise_for_status()
-
-        summary = r.json()["choices"][0]["message"]["content"]
-
-        return jsonify({
-            "spoken_response": summary,
-            "videos": videos,
-            "fallback": "titles_only"
-        })
-
-    # ✅ Full transcript summary
-    combined = "\n\n".join(transcripts)[:12000]
 
     headers = {
         "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
@@ -311,14 +284,8 @@ Titles:
     body = {
         "model": "gpt-4o-mini",
         "messages": [
-            {
-                "role": "system",
-                "content": "Summarise the following YouTube content into a concise spoken overview."
-            },
-            {
-                "role": "user",
-                "content": combined
-            }
+            {"role": "system", "content": "Create a concise spoken-friendly summary."},
+            {"role": "user", "content": prompt}
         ]
     }
 
@@ -334,8 +301,10 @@ Titles:
 
     return jsonify({
         "spoken_response": summary,
-        "videos": videos
+        "videos": videos,
+        "fallback": None if transcripts else "titles_only"
     })
+
 
 # --------------------------------------------------
 # Health Check
@@ -343,10 +312,7 @@ Titles:
 
 @app.route("/youtube-test")
 def youtube_test():
-    return jsonify({
-        "ok": True,
-        "message": "YouTube backend is alive"
-    })
+    return jsonify({"ok": True, "message": "YouTube backend is alive"})
 
 
 # --------------------------------------------------
