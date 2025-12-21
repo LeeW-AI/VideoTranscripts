@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 21:49
+# Latest version 21st Dec 21:52
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -294,7 +294,6 @@ Titles:
         return jsonify({
             "error": "OPENAI_API_KEY not configured on server"
         }), 500
-
 
     r = requests.post(
         "https://api.openai.com/v1/chat/completions",
