@@ -291,9 +291,9 @@ Titles:
 
     # Open AI Key valid check
     if not os.environ.get("OPENAI_API_KEY"):
-    return jsonify({
-        "error": "OPENAI_API_KEY not configured on server"
-    }), 500
+        return jsonify({
+            "error": "OPENAI_API_KEY not configured on server"
+        }), 500
 
 
     r = requests.post(
