@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 21:46
+# Latest version 21st Dec 21:49
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
