@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 22:08
+# Latest version 21st Dec 22:30
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -225,6 +225,9 @@ def youtube_query():
     else:
         return jsonify({"error": "No target specified"}), 400
 
+    if not videos:
+    return jsonify({"error": "No videos found"}), 404
+
     # ----------------------------
     # LIST TITLES
     # ----------------------------
@@ -238,7 +241,7 @@ def youtube_query():
         })
 
     # ----------------------------
-    # SUMMARISE (FIXED)
+    # SUMMARISE (PRODUCTION SAFE)
     # ----------------------------
     transcripts = []
     for v in videos:
@@ -251,81 +254,83 @@ def youtube_query():
     # Build summarisation prompt
     if is_single_video and transcripts:
         prompt = f"""
-Summarise the following YouTube video transcript in a concise, spoken-friendly way.
+    Summarise the following YouTube video transcript in a concise, spoken-friendly way.
 
-Transcript:
-{transcripts[0][:12000]}
-"""
-
+    Transcript:
+    {transcripts[0][:12000]}
+    """.strip()
     elif transcripts:
         prompt = f"""
-Summarise the following YouTube videos into a concise spoken overview.
-Highlight common themes and key points.
+        Summarise the following YouTube videos into a concise spoken overview.
+        Highlight common themes and key points.
 
-Content:
-{chr(10).join(transcripts)[:12000]}
-"""
-
+        Content:
+    {chr(10).join(transcripts)[:12000]}
+    """.strip()
     else:
         titles = [v["title"] for v in videos]
         prompt = f"""
-Based only on the following YouTube video titles, infer the main topics
-and provide a concise spoken summary. Do not mention missing transcripts.
+        Based only on the following YouTube video titles, infer the main topics
+        and provide a concise spoken summary. Do not mention missing transcripts.
 
-Titles:
-{chr(10).join(titles)}
-"""
+        Titles:
+        {chr(10).join(titles)}
+        """.strip()
 
-    headers = {
-        "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
-        "Content-Type": "application/json"
-    }
-    
-    body = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": "Create a concise spoken-friendly summary."},
-            {"role": "user", "content": prompt}
-        ]
-    }
-
-    # Open AI Key valid check
-    print(
-        "OPENAI KEY PRESENT:",
-        bool(os.environ.get("OPENAI_API_KEY")),
-        "LEN:",
-        len(os.environ.get("OPENAI_API_KEY", "")),
-    )
-    
-    if not os.environ.get("OPENAI_API_KEY"):
+    # ---- OpenAI Key Check ----
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
         return jsonify({
             "error": "OPENAI_API_KEY not configured on server"
         }), 500
 
+    # ---- OpenAI Call (Responses API) ----
     try:
         r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=body,
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {openai_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4.1-mini",
+                "input": prompt
+            },
             timeout=30
         )
         r.raise_for_status()
+
+        data = r.json()
+        summary = data.get("output_text")
+
+        if not summary:
+            raise ValueError("No output_text in OpenAI response")
+
     except requests.exceptions.HTTPError as e:
         return jsonify({
-            "error": "OpenAI request failed",
-            "status_code": r.status_code,
-            "response": r.text
+            "error": "OpenAI HTTP error",
+            "details": str(e),
+            "status_code": e.response.status_code
         }), 502
 
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "error": "OpenAI network error",
+            "details": str(e)
+        }), 502
 
-    summary = r.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return jsonify({
+            "error": "OpenAI response parsing error",
+            "details": str(e)
+        }), 500
 
+    # ---- Success ----
     return jsonify({
         "spoken_response": summary,
         "videos": videos,
         "fallback": None if transcripts else "titles_only"
     })
-
 
 # --------------------------------------------------
 # Health Check
