@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 21:52
+# Latest version 21st Dec 22:08
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -290,18 +290,33 @@ Titles:
     }
 
     # Open AI Key valid check
+    print(
+        "OPENAI KEY PRESENT:",
+        bool(os.environ.get("OPENAI_API_KEY")),
+        "LEN:",
+        len(os.environ.get("OPENAI_API_KEY", "")),
+    )
+    
     if not os.environ.get("OPENAI_API_KEY"):
         return jsonify({
             "error": "OPENAI_API_KEY not configured on server"
         }), 500
 
-    r = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=body,
-        timeout=30
-    )
-    r.raise_for_status()
+    try:
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=body,
+            timeout=30
+        )
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        return jsonify({
+            "error": "OpenAI request failed",
+            "status_code": r.status_code,
+            "response": r.text
+        }), 502
+
 
     summary = r.json()["choices"][0]["message"]["content"]
 
