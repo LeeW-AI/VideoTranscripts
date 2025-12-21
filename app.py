@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 22:30
+# Latest version 21st Dec 22:33
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -226,7 +226,7 @@ def youtube_query():
         return jsonify({"error": "No target specified"}), 400
 
     if not videos:
-    return jsonify({"error": "No videos found"}), 404
+        return jsonify({"error": "No videos found"}), 404
 
     # ----------------------------
     # LIST TITLES
