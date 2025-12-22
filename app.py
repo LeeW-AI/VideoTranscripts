@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:42
+# Latest version 22nd Dec 01:46
 
 
 from flask import Flask, request, jsonify
@@ -38,6 +38,7 @@ def extract_playlist_id(url: str) -> str | None:
 
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 print("OPENAI KEY PRESENT:", bool(os.environ.get("OPENAI_API_KEY")))
+print("OPENAI_PROJECT_ID:", os.environ.get("OPENAI_PROJECT_ID"))
 
 # --------------------------------------------------
 # Transcript Endpoint
