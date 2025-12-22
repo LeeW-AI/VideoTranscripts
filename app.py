@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:29
+# Latest version 22nd Dec 01:34
 
 
 from flask import Flask, request, jsonify
@@ -273,7 +273,7 @@ Titles:
 {chr(10).join(titles)}
 """.strip()
 
-    openai_key = os.environ.get("OPENAI_API_KEY")
+    openai_key = os.environ.get("OPENAI_API_KEY").strip()
     if not openai_key:
         return jsonify({"error": "OPENAI_API_KEY not configured"}), 500
 
