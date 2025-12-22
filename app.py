@@ -1,10 +1,8 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 23:52
+# Latest version 21st Dec 00:00
 
 
-print("OPENAI KEY RAW:", repr(os.environ.get("OPENAI_API_KEY")))
-print("OPENAI KEY LEN:", len(os.environ.get("OPENAI_API_KEY", "")))
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -18,6 +16,11 @@ import requests
 import re
 
 app = Flask(__name__)
+
+print("OPENAI KEY RAW:", repr(os.environ.get("OPENAI_API_KEY")))
+print("OPENAI KEY LEN:", len(os.environ.get("OPENAI_API_KEY", "")))
+
+
 
 # --------------------------------------------------
 # Helpers
