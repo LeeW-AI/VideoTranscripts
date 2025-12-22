@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:37
+# Latest version 22nd Dec 01:42
 
 
 from flask import Flask, request, jsonify
@@ -284,12 +284,20 @@ Titles:
     # ----------------------------
     # OpenAI Responses API
     # ----------------------------
+
+
+
+    project_id = os.environ.get("OPENAI_PROJECT_ID")
+    if not project_id:
+        return jsonify({"error": "OPENAI_PROJECT_ID not configured"}), 500
+
     try:
         r = requests.post(
             "https://api.openai.com/v1/responses",
             headers={
                 "Authorization": f"Bearer {openai_key}",  
                 "Content-Type": "application/json",
+                "OpenAI-Project": project_id,
                 #"OpenAI-Project": os.environ.get("OPENAI_PROJECT_ID"),
 
             },
