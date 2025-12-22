@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 21st Dec 00:00
+# Latest version 22nd Dec 00:10
 
 
 
@@ -17,8 +17,8 @@ import re
 
 app = Flask(__name__)
 
-print("OPENAI KEY RAW:", repr(os.environ.get("OPENAI_API_KEY")))
-print("OPENAI KEY LEN:", len(os.environ.get("OPENAI_API_KEY", "")))
+# print("OPENAI KEY RAW:", repr(os.environ.get("OPENAI_API_KEY")))
+# print("OPENAI KEY LEN:", len(os.environ.get("OPENAI_API_KEY", "")))
 
 
 
@@ -297,13 +297,14 @@ def youtube_query():
             "https://api.openai.com/v1/responses",
             headers={
                 "Authorization": f"Bearer {openai_key}",
-                "Content-Type": "application/json"
+                "OpenAI-Project": os.environ["OPENAI_PROJECT_ID"],
+                "Content-Type": "application/json",
             },
             json={
                 "model": "gpt-4.1-mini",
-                "input": prompt
+                "input": prompt,
             },
-            timeout=30
+            timeout=30,
         )
         r.raise_for_status()
 
