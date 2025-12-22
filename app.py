@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 00:25
+# Latest version 22nd Dec 01:14
 
 
 from flask import Flask, request, jsonify
@@ -284,8 +284,10 @@ Titles:
         r = requests.post(
             "https://api.openai.com/v1/responses",
             headers={
-                "Authorization": f"Bearer {openai_key}",
+                "Authorization": f"Bearer {openai_key}",  
                 "Content-Type": "application/json"
+                "OpenAI-Project": os.environ.get("OPENAI_PROJECT_ID"),
+
             },
             json={
                 "model": "gpt-4.1-mini",
@@ -296,32 +298,20 @@ Titles:
         r.raise_for_status()
 
         data = r.json()
+
         summary = None
 
-        # Preferred structured output
         for item in data.get("output", []):
             for block in item.get("content", []):
-                if block.get("type") == "output_text" and block.get("text"):
-                    summary = block["text"]
+                if block.get("type") == "output_text":
+                    summary = block.get("text")
                     break
             if summary:
                 break
 
-        # Fallbacks
-        if not summary and "output_text" in data:
-            summary = data["output_text"]
-
-        if not summary and data.get("output"):
-            summary = " ".join(
-                block.get("text", "")
-                for item in data["output"]
-                for block in item.get("content", [])
-                if isinstance(block, dict)
-            ).strip()
-
         if not summary:
-            raise ValueError("No usable text in OpenAI response")
-
+            raise ValueError("No output_text found in OpenAI response")
+    
     except requests.exceptions.HTTPError as e:
         return jsonify({
             "error": "OpenAI HTTP error",
