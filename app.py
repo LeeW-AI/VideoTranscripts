@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:14
+# Latest version 22nd Dec 01:17
 
 
 from flask import Flask, request, jsonify
@@ -285,7 +285,7 @@ Titles:
             "https://api.openai.com/v1/responses",
             headers={
                 "Authorization": f"Bearer {openai_key}",  
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
                 "OpenAI-Project": os.environ.get("OPENAI_PROJECT_ID"),
 
             },
