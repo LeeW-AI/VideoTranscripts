@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:46
+# Latest version 22nd Dec 01:51
 
 
 from flask import Flask, request, jsonify
@@ -35,7 +35,7 @@ def extract_playlist_id(url: str) -> str | None:
     match = re.search(r"list=([\w-]+)", url)
     return match.group(1) if match else None
 
-
+print("OPENAI_PROJECT_ID:", repr(os.environ.get("OPENAI_PROJECT_ID")))
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 print("OPENAI KEY PRESENT:", bool(os.environ.get("OPENAI_API_KEY")))
 print("OPENAI_PROJECT_ID:", os.environ.get("OPENAI_PROJECT_ID"))
