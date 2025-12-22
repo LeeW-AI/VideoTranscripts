@@ -1,7 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 00:16
-
+# Latest version 22nd Dec 00:25
 
 
 from flask import Flask, request, jsonify
@@ -16,11 +15,6 @@ import requests
 import re
 
 app = Flask(__name__)
-
-# print("OPENAI KEY RAW:", repr(os.environ.get("OPENAI_API_KEY")))
-# print("OPENAI KEY LEN:", len(os.environ.get("OPENAI_API_KEY", "")))
-
-
 
 # --------------------------------------------------
 # Helpers
@@ -43,6 +37,7 @@ def extract_playlist_id(url: str) -> str | None:
 
 
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
+print("OPENAI KEY PRESENT:", bool(os.environ.get("OPENAI_API_KEY")))
 
 # --------------------------------------------------
 # Transcript Endpoint
@@ -179,34 +174,28 @@ def youtube_query():
     # ----------------------------
     videos = []
 
-    # 1️⃣ Direct video
     if video_url:
         video_id = extract_video_id(video_url)
         if not video_id:
             return jsonify({"error": "Invalid video URL"}), 400
         videos = [{"videoId": video_id, "title": "Provided video"}]
 
-    # 2️⃣ Playlist (future)
     elif playlist_url:
         return jsonify({"error": "Playlist support not implemented"}), 400
 
-    # 3️⃣ Free-form query → channel
     elif query:
         q = query.lower()
 
-        # detect "last N"
         limit_match = re.search(r"last\s+(\d+)", q)
         if limit_match:
             limit = int(limit_match.group(1))
 
         channel_name = None
 
-        # @handle
         handle_match = re.search(r"@([\w\d_]+)", query)
         if handle_match:
             channel_name = handle_match.group(1)
 
-        # "X channel"
         if not channel_name and "channel" in q:
             words = query.split()
             for i, w in enumerate(words):
@@ -214,7 +203,6 @@ def youtube_query():
                     channel_name = words[i - 1]
                     break
 
-        # fallback cleanup
         if not channel_name:
             channel_name = re.sub(
                 r"\b(youtube|videos?|latest|summari[sz]e|from|the)\b",
@@ -248,7 +236,7 @@ def youtube_query():
         })
 
     # ----------------------------
-    # SUMMARISE (PRODUCTION SAFE)
+    # SUMMARISE
     # ----------------------------
     transcripts = []
     for v in videos:
@@ -258,70 +246,82 @@ def youtube_query():
 
     is_single_video = len(videos) == 1
 
-    # Build summarisation prompt
     if is_single_video and transcripts:
         prompt = f"""
-    Summarise the following YouTube video transcript in a concise, spoken-friendly way.
+Summarise the following YouTube video transcript in a concise, spoken-friendly way.
 
-    Transcript:
-    {transcripts[0][:12000]}
-    """.strip()
+Transcript:
+{transcripts[0][:12000]}
+""".strip()
+
     elif transcripts:
         prompt = f"""
-        Summarise the following YouTube videos into a concise spoken overview.
-        Highlight common themes and key points.
+Summarise the following YouTube videos into a concise spoken overview.
+Highlight common themes and key points.
 
-        Content:
-    {chr(10).join(transcripts)[:12000]}
-    """.strip()
+Content:
+{chr(10).join(transcripts)[:12000]}
+""".strip()
+
     else:
         titles = [v["title"] for v in videos]
         prompt = f"""
-        Based only on the following YouTube video titles, infer the main topics
-        and provide a concise spoken summary. Do not mention missing transcripts.
+Based only on the following YouTube video titles, infer the main topics
+and provide a concise spoken summary. Do not mention missing transcripts.
 
-        Titles:
-        {chr(10).join(titles)}
-        """.strip()
+Titles:
+{chr(10).join(titles)}
+""".strip()
 
-    # ---- OpenAI Key Check ----
     openai_key = os.environ.get("OPENAI_API_KEY")
     if not openai_key:
-        return jsonify({
-            "error": "OPENAI_API_KEY not configured on server"
-        }), 500
+        return jsonify({"error": "OPENAI_API_KEY not configured"}), 500
 
-    # ---- OpenAI Call (Responses API) ----
+    # ----------------------------
+    # OpenAI Responses API
+    # ----------------------------
     try:
         r = requests.post(
             "https://api.openai.com/v1/responses",
             headers={
                 "Authorization": f"Bearer {openai_key}",
-                "OpenAI-Project": os.environ["OPENAI_PROJECT_ID"],
-                "Content-Type": "application/json",
+                "Content-Type": "application/json"
             },
             json={
                 "model": "gpt-4.1-mini",
-                "input": prompt,
+                "input": prompt
             },
-            timeout=30,
+            timeout=30
         )
         r.raise_for_status()
 
         data = r.json()
-
         summary = None
+
+        # Preferred structured output
         for item in data.get("output", []):
             for block in item.get("content", []):
-                if block.get("type") == "output_text":
-                    summary = block.get("text")
+                if block.get("type") == "output_text" and block.get("text"):
+                    summary = block["text"]
                     break
             if summary:
                 break
 
+        # Fallbacks
+        if not summary and "output_text" in data:
+            summary = data["output_text"]
+
+        if not summary and data.get("output"):
+            summary = " ".join(
+                block.get("text", "")
+                for item in data["output"]
+                for block in item.get("content", [])
+                if isinstance(block, dict)
+            ).strip()
+
         if not summary:
-            raise ValueError("No output_text found in OpenAI response")
-    
+            raise ValueError("No usable text in OpenAI response")
+
     except requests.exceptions.HTTPError as e:
         return jsonify({
             "error": "OpenAI HTTP error",
@@ -341,12 +341,12 @@ def youtube_query():
             "details": str(e)
         }), 500
 
-    # ---- Success ----
     return jsonify({
         "spoken_response": summary,
         "videos": videos,
         "fallback": None if transcripts else "titles_only"
     })
+
 
 # --------------------------------------------------
 # Health Check
