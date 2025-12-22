@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:34
+# Latest version 22nd Dec 01:37
 
 
 from flask import Flask, request, jsonify
@@ -349,6 +349,17 @@ Titles:
 @app.route("/youtube-test")
 def youtube_test():
     return jsonify({"ok": True, "message": "YouTube backend is alive"})
+
+
+@app.route("/debug-openai-key")
+def debug_openai_key():
+    key = os.environ.get("OPENAI_API_KEY", "")
+    return jsonify({
+        "present": bool(key),
+        "length": len(key),
+        "starts_with": key[:8],
+        "ends_with": key[-8:]
+    })
 
 
 # --------------------------------------------------
