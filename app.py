@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 00:10
+# Latest version 22nd Dec 00:16
 
 
 
@@ -309,11 +309,19 @@ def youtube_query():
         r.raise_for_status()
 
         data = r.json()
-        summary = data.get("output_text")
+
+        summary = None
+        for item in data.get("output", []):
+            for block in item.get("content", []):
+                if block.get("type") == "output_text":
+                    summary = block.get("text")
+                    break
+            if summary:
+                break
 
         if not summary:
-            raise ValueError("No output_text in OpenAI response")
-
+            raise ValueError("No output_text found in OpenAI response")
+    
     except requests.exceptions.HTTPError as e:
         return jsonify({
             "error": "OpenAI HTTP error",
