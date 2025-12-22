@@ -1,6 +1,6 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:20
+# Latest version 22nd Dec 01:29
 
 
 from flask import Flask, request, jsonify
@@ -277,9 +277,9 @@ Titles:
     if not openai_key:
         return jsonify({"error": "OPENAI_API_KEY not configured"}), 500
 
-    project_id = os.environ.get("OPENAI_PROJECT_ID")
-    if not project_id:
-        return jsonify({"error": "OPENAI_PROJECT_ID not configured"}), 500
+    #project_id = os.environ.get("OPENAI_PROJECT_ID")
+    #if not project_id:
+    #    return jsonify({"error": "OPENAI_PROJECT_ID not configured"}), 500
 
     # ----------------------------
     # OpenAI Responses API
@@ -290,7 +290,7 @@ Titles:
             headers={
                 "Authorization": f"Bearer {openai_key}",  
                 "Content-Type": "application/json",
-                "OpenAI-Project": os.environ.get("OPENAI_PROJECT_ID"),
+                #"OpenAI-Project": os.environ.get("OPENAI_PROJECT_ID"),
 
             },
             json={
