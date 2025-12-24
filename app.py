@@ -351,6 +351,41 @@ Titles:
     })
 
 
+# Implement Query API Contract
+@app.route("/query", methods=["POST"])
+def query():
+    payload = request.get_json(silent=True) or {}
+
+    mode = payload.get("mode")                # e.g. "summary", "deep_dive"
+    question = payload.get("question")        # user query
+    sources = payload.get("sources", [])      # ["youtube", "articles"]
+    filters = payload.get("filters", {})      # optional
+    options = payload.get("options", {})      # spoken, citations
+
+    if not mode or not question:
+        return jsonify({"error": "mode and question are required"}), 400
+
+    # TEMP: stub context (real retrieval comes later)
+    context = "No indexed sources available yet."
+
+    prompt = build_prompt(
+        mode=mode,
+        question=question,
+        context=context
+    )
+
+    response = call_openai(prompt)
+
+    return jsonify({
+        "mode": mode,
+        "question": question,
+        "answer": response,
+        "sources_used": sources,
+        "confidence": "low (no indexed sources yet)"
+    })
+
+
+
 # --------------------------------------------------
 # Health Check
 # --------------------------------------------------
