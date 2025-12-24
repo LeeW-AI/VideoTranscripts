@@ -40,6 +40,51 @@ print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 print("OPENAI KEY PRESENT:", bool(os.environ.get("OPENAI_API_KEY")))
 print("OPENAI_PROJECT_ID:", os.environ.get("OPENAI_PROJECT_ID"))
 
+
+from prompts import PROMPTS
+
+def build_prompt(mode: str, question: str, context: str) -> str:
+    system = PROMPTS["global"]
+
+    template = PROMPTS.get(mode)
+    if not template:
+        raise ValueError(f"Unknown prompt mode: {mode}")
+
+    user_prompt = template.format(
+        question=question,
+        context=context
+    )
+
+    return system + "\n\n" + user_prompt
+
+def call_openai(prompt: str) -> str:
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
+        raise RuntimeError("OPENAI_API_KEY missing")
+
+    r = requests.post(
+        "https://api.openai.com/v1/responses",
+        headers={
+            "Authorization": f"Bearer {openai_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "gpt-4.1-mini",
+            "input": prompt
+        },
+        timeout=30
+    )
+
+    r.raise_for_status()
+    data = r.json()
+
+    for item in data.get("output", []):
+        for block in item.get("content", []):
+            if block.get("type") == "output_text":
+                return block.get("text")
+
+    raise ValueError("No output_text returned")
+
 # --------------------------------------------------
 # Transcript Endpoint
 # --------------------------------------------------
