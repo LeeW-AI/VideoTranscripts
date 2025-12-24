@@ -1,8 +1,8 @@
 # Latest stable version – summarise fixes applied
+# This code worked with the youtube summarise on 1 video test.
 
-# Latest version 24th Dec 19:18
+# Latest version 22nd Dec 01:51
 
-# uses web-production-42638.up.railway.app
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -40,51 +40,6 @@ print("OPENAI_PROJECT_ID:", repr(os.environ.get("OPENAI_PROJECT_ID")))
 print("YT KEY PRESENT:", bool(os.environ.get("YOUTUBE_API_KEY")))
 print("OPENAI KEY PRESENT:", bool(os.environ.get("OPENAI_API_KEY")))
 print("OPENAI_PROJECT_ID:", os.environ.get("OPENAI_PROJECT_ID"))
-
-
-from prompts import PROMPTS
-
-def build_prompt(mode: str, question: str, context: str) -> str:
-    system = PROMPTS["global"]
-
-    template = PROMPTS.get(mode)
-    if not template:
-        raise ValueError(f"Unknown prompt mode: {mode}")
-
-    user_prompt = template.format(
-        question=question,
-        context=context
-    )
-
-    return system + "\n\n" + user_prompt
-
-def call_openai(prompt: str) -> str:
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    if not openai_key:
-        raise RuntimeError("OPENAI_API_KEY missing")
-
-    r = requests.post(
-        "https://api.openai.com/v1/responses",
-        headers={
-            "Authorization": f"Bearer {openai_key}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "gpt-4.1-mini",
-            "input": prompt
-        },
-        timeout=30
-    )
-
-    r.raise_for_status()
-    data = r.json()
-
-    for item in data.get("output", []):
-        for block in item.get("content", []):
-            if block.get("type") == "output_text":
-                return block.get("text")
-
-    raise ValueError("No output_text returned")
 
 # --------------------------------------------------
 # Transcript Endpoint
@@ -395,41 +350,6 @@ Titles:
         "videos": videos,
         "fallback": None if transcripts else "titles_only"
     })
-
-
-# Implement Query API Contract
-@app.route("/query", methods=["POST"])
-def query():
-    payload = request.get_json(silent=True) or {}
-
-    mode = payload.get("mode")                # e.g. "summary", "deep_dive"
-    question = payload.get("question")        # user query
-    sources = payload.get("sources", [])      # ["youtube", "articles"]
-    filters = payload.get("filters", {})      # optional
-    options = payload.get("options", {})      # spoken, citations
-
-    if not mode or not question:
-        return jsonify({"error": "mode and question are required"}), 400
-
-    # TEMP: stub context (real retrieval comes later)
-    context = "No indexed sources available yet."
-
-    prompt = build_prompt(
-        mode=mode,
-        question=question,
-        context=context
-    )
-
-    response = call_openai(prompt)
-
-    return jsonify({
-        "mode": mode,
-        "question": question,
-        "answer": response,
-        "sources_used": sources,
-        "confidence": "low (no indexed sources yet)"
-    })
-
 
 
 # --------------------------------------------------
