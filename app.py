@@ -1,7 +1,8 @@
 # Latest stable version – summarise fixes applied
 
-# Latest version 22nd Dec 01:51
+# Latest version 24th Dec 19:18
 
+# uses web-production-42638.up.railway.app
 
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
